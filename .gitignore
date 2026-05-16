@@ -1,0 +1,9 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pth
+*.onnx
+mlruns/
+.env
+notebooks/.ipynb_checkpoints/
