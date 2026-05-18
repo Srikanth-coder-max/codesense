@@ -21,7 +21,7 @@ function App() {
     setIngestStatus('Cloning and building vector DB (this may take a moment)...');
 
     try {
-      const response = await fetch("http://localhost:8000/ingest", {
+      const response = await fetch("http://15.134.143.250:8000/ingest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ github_url: githubUrl }),
@@ -50,7 +50,7 @@ function App() {
     setAnswer(''); 
 
     try {
-      const response = await fetch("http://localhost:8000/ask", {
+      const response = await fetch("http://15.134.143.250:8000/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: query }),
