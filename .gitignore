@@ -1,9 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
 .venv/
 venv/
-__pycache__/
-*.pyc
-*.pth
-*.onnx
-mlruns/
+env/
+
+# Environment and secrets
 .env
-notebooks/.ipynb_checkpoints/
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Chroma / vector DB artifacts
+chromadb/
+backend/chromadb/
+
+# Node / React frontend
+frontend/node_modules/
+frontend/build/
+frontend/.cache/
+frontend/.eslintcache
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
