@@ -12,6 +12,10 @@ WORKDIR /app
 
 # Create a non-root user for security best practices
 RUN useradd -m appuser
+
+# Create a temporary directory owned by appuser to avoid permission issues
+RUN mkdir -p /app/temp && chown -R appuser:appuser /app/temp
+
 USER appuser
 
 # Copy requirements first to leverage Docker layer caching

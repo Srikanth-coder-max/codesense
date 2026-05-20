@@ -15,7 +15,7 @@ from ingest import build_vector_db
 app = FastAPI(title='CodeSense API')
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],
+    allow_origins=["https://codesense-beta.vercel.app"],
     allow_credentials=True,
     allow_methods=['*'],
     allow_headers=['*'],
@@ -33,7 +33,7 @@ def event_stream(query: str):
         yield f"data: {payload}\n\n"
     yield "data: [DONE]\n\n"
 
-@app.post('/ask')
+@app.post('/api/ask')
 @traceable
 def ask_question(request: QueryRequest):
     print(f"API received query: {request.query}")
@@ -46,10 +46,11 @@ def ask_question(request: QueryRequest):
         }
     )
 
-@app.post('/ingest')
+@app.post('/api/ingest')
 async def ingest_repo(request: RepoRequest):
     print(f"API received repository URL: {request.github_url}")
-    temp_dir = tempfile.mkdtemp()
+    # Force the temporary directory to be inside our permitted /app/temp folder
+    temp_dir = tempfile.mkdtemp(dir="/app/temp")
     try:
         print(f"Cloning {request.github_url}")
         Repo.clone_from(
