@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
+// This will look for the environment variable defined in your Vercel settings.
+// If not found (e.g., during local dev), it defaults to an empty string (relative path).
+const API_BASE_URL = process.env.REACT_APP_API_URL || "";
+
 function App() {
   // --- New States for GitHub Ingestion ---
   const [githubUrl, setGithubUrl] = useState('');
@@ -13,7 +17,7 @@ function App() {
   const [answer, setAnswer] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // --- New Handler for /ingest ---
+  // --- Updated Handler for /ingest ---
   const handleIngest = async (e) => {
     e.preventDefault();
     if (!githubUrl.trim()) return;
@@ -22,7 +26,7 @@ function App() {
     setIngestStatus('Cloning and building vector DB (this may take a moment)...');
 
     try {
-      const response = await fetch("/api/ingest", {
+      const response = await fetch(`${API_BASE_URL}/api/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ github_url: githubUrl }),
@@ -42,7 +46,7 @@ function App() {
     }
   };
 
-  // --- Existing Handler for /ask ---
+  // --- Updated Handler for /ask ---
   const handleAsk = async (e) => {
     e.preventDefault();
     if (!query.trim()) return;
@@ -51,7 +55,7 @@ function App() {
     setAnswer(''); 
 
     try {
-      const response = await fetch("/api/ask", {
+      const response = await fetch(`${API_BASE_URL}/api/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: query }),
