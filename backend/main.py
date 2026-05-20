@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from langsmith import traceable
 from git import Repo
 import json
 import tempfile
@@ -33,6 +34,7 @@ def event_stream(query: str):
     yield "data: [DONE]\n\n"
 
 @app.post('/ask')
+@traceable
 def ask_question(request: QueryRequest):
     print(f"API received query: {request.query}")
     return StreamingResponse(

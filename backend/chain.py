@@ -7,6 +7,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableLambda
 from langchain_aws import ChatBedrock
+from langsmith import traceable
 
 load_dotenv()
 
@@ -71,7 +72,7 @@ def get_answer(query: str) -> str:
     print(f"Thinking about: '{query}'...")
     return build_rag_chain().invoke({"input": query})
 
-
+@traceable
 def stream_answer(query: str):
     for chunk in build_rag_chain().stream({"input": query}):
         yield chunk
