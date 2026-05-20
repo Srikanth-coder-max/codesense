@@ -29,4 +29,4 @@ COPY --chown=appuser:appuser . .
 
 # Expose port and start the application
 EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

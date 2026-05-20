@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import './App.css';
 
 function App() {
   // --- New States for GitHub Ingestion ---
@@ -93,71 +94,82 @@ function App() {
   };
 
   return (
-    <div style={{ maxWidth: '800px', margin: '50px auto', fontFamily: 'sans-serif' }}>
-      <h1>CodeSense</h1>
-      
-      {/* --- Step 1: Ingest Repo UI --- */}
-      <div style={{ background: '#f1f3f5', padding: '15px', borderRadius: '8px', marginBottom: '30px' }}>
-        <h3>1. Load Repository</h3>
-        <form onSubmit={handleIngest} style={{ display: 'flex', gap: '10px' }}>
-          <input
-            type="text"
-            value={githubUrl}
-            onChange={(e) => setGithubUrl(e.target.value)}
-            placeholder="https://github.com/username/repo"
-            style={{ flex: 1, padding: '10px', fontSize: '15px', borderRadius: '4px', border: '1px solid #ccc' }}
-            disabled={isIngesting}
-          />
-          <button 
-            type="submit" 
-            disabled={isIngesting || !githubUrl.trim()} 
-            style={{ padding: '10px 20px', cursor: 'pointer', borderRadius: '4px', background: '#28a745', color: 'white', border: 'none' }}
-          >
-            {isIngesting ? 'Loading...' : 'Load Repo'}
-          </button>
-        </form>
-        {ingestStatus && <p style={{ marginTop: '10px', fontSize: '14px', fontWeight: 'bold' }}>{ingestStatus}</p>}
-      </div>
+    <div className="app-root">
+      <header className="app-hero">
+        <div className="app-hero-inner">
+          <h1 className="brand">CodeSense</h1>
+          <p className="subtitle">Explore and ask questions about your codebase</p>
+        </div>
+      </header>
 
-      {/* --- Step 2: Ask Questions UI --- */}
-      <h3>2. Ask Codebase</h3>
-      <form onSubmit={handleAsk} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Ask a question about your codebase..."
-          style={{ flex: 1, padding: '12px', fontSize: '16px', borderRadius: '4px', border: '1px solid #ccc' }}
-          disabled={isLoading}
-        />
-        <button 
-          type="submit" 
-          disabled={isLoading || !query.trim()} 
-          style={{ padding: '12px 24px', fontSize: '16px', cursor: 'pointer', borderRadius: '4px', background: '#007bff', color: 'white', border: 'none' }}
-        >
-          {isLoading ? 'Searching...' : 'Ask'}
-        </button>
-      </form>
+      <main className="app-container">
+        <div className="left-col">
+          <div className="card">
+            <h2 className="card-title">Load Repository</h2>
+            <form onSubmit={handleIngest} className="form-row">
+              <input
+                className="input"
+                type="text"
+                value={githubUrl}
+                onChange={(e) => setGithubUrl(e.target.value)}
+                placeholder="https://github.com/username/repo"
+                disabled={isIngesting}
+              />
+              <button className="btn primary" type="submit" disabled={isIngesting || !githubUrl.trim()}>
+                {isIngesting ? 'Loading...' : 'Load Repo'}
+              </button>
+            </form>
+            {ingestStatus && <p className="status">{ingestStatus}</p>}
+          </div>
 
-      {/* --- Results Display --- */}
-      <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '8px', minHeight: '150px', border: '1px solid #e9ecef' }}>
-        {answer ? (
-          <ReactMarkdown>{answer}</ReactMarkdown>
-        ) : isLoading ? (
-          <span style={{ color: '#6c757d', fontSize: '20px' }}>▋</span>
-        ) : (
-          <p style={{ color: '#6c757d', margin: 0 }}>The response will stream here...</p>
-        )}
-      </div>
+          <div className="card small">
+            <h3 className="card-title">Tips</h3>
+            <ul className="tips">
+              <li>Paste a GitHub repo URL to index its code.</li>
+              <li>Once ingested, ask natural language questions.</li>
+            </ul>
+          </div>
+        </div>
 
-      {answer && !isLoading && (
-        <button
-          onClick={() => { setAnswer(''); setQuery(''); }}
-          style={{ marginTop: '12px', padding: '6px 14px', cursor: 'pointer', borderRadius: '4px', background: 'transparent', border: '1px solid #ccc', color: '#6c757d', fontSize: '14px' }}
-        >
-          Clear
-        </button>
-      )}
+        <div className="right-col">
+          <div className="card">
+            <h2 className="card-title">Ask Codebase</h2>
+            <form onSubmit={handleAsk} className="form-row">
+              <input
+                className="input"
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Ask a question about your codebase..."
+                disabled={isLoading}
+              />
+              <button className="btn accent" type="submit" disabled={isLoading || !query.trim()}>
+                {isLoading ? 'Searching...' : 'Ask'}
+              </button>
+            </form>
+
+            <div className="result-card">
+              {answer ? (
+                <div className="markdown-output"><ReactMarkdown>{answer}</ReactMarkdown></div>
+              ) : isLoading ? (
+                <div className="loader" aria-hidden>Searching…</div>
+              ) : (
+                <div className="empty">The streamed response will appear here.</div>
+              )}
+            </div>
+
+            {answer && !isLoading && (
+              <div className="row-right">
+                <button className="btn ghost" onClick={() => { setAnswer(''); setQuery(''); }}>
+                  Clear
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      <footer className="app-footer">Built with ❤️ — CodeSense</footer>
     </div>
   );
 }
