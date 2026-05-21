@@ -24,10 +24,6 @@ def format_documents(documents):
     return "\n\n".join(formatted)
 
 
-def extract_input(payload: dict[str, str]) -> str:
-    return payload["input"]
-
-
 def get_llm():
     print("Using Amazon Bedrock (Meta Llama 3)")
     return ChatBedrock(
@@ -35,15 +31,26 @@ def get_llm():
         model_kwargs={"temperature":0.0},
         streaming=True
     )
-        
 
-def build_rag_chain():
+@traceable
+def stream_answer(query: str):
+    print(f"Thinking about: '{query}'...")
+    
     embeddings = HuggingFaceEmbeddings(model_name='all-MiniLM-L6-v2')
     db = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings)
     retriever = db.as_retriever(search_kwargs={'k': 3})
-
+    
+    # 1. Manually retrieve documents first
+    docs = retriever.invoke(query)
+    print(f"DEBUG: Retrieved {len(docs)} documents")
+    
+    # 2. Handle empty context
+    if len(docs) == 0:
+        yield "No relevant code found in the repository. Try a different question."
+        return
+        
+    # 3. Build generator chain
     llm = get_llm()
-
     system_prompt = (
         "You are an expert AI software engineer. Use the following pieces of "
         "retrieved context to answer the user's question about the codebase.\n\n"
@@ -54,29 +61,18 @@ def build_rag_chain():
         ("system", system_prompt),
         ("human", "{input}")
     ])
-
-    extract_query = RunnableLambda(extract_input)
-
-    return (
-        {
-            "context": extract_query | retriever | RunnableLambda(format_documents),
-            "input": extract_query,
-        }
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
-
-
-def get_answer(query: str) -> str:
-    print(f"Thinking about: '{query}'...")
-    return build_rag_chain().invoke({"input": query})
-
-@traceable
-def stream_answer(query: str):
-    for chunk in build_rag_chain().stream({"input": query}):
+    
+    chain = prompt | llm | StrOutputParser()
+    
+    # 4. Stream output
+    context_str = format_documents(docs)
+    for chunk in chain.stream({"context": context_str, "input": query}):
         yield chunk
 
+def get_answer(query: str) -> str:
+    """Non-streaming version for testing"""
+    chunks = list(stream_answer(query))
+    return "".join(chunks)
 
 if __name__ == "__main__":
     answer = get_answer("Explain what the math_funcs.py file does.")
