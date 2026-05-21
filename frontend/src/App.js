@@ -2,9 +2,17 @@ import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
-// This will look for the environment variable defined in your Vercel settings.
-// If not found (e.g., during local dev), it defaults to an empty string (relative path).
-const API_BASE_URL = process.env.REACT_APP_API_URL || "";
+// API routing strategy:
+//  - PRODUCTION (Vercel): always use a relative base ("") so that fetch("/api/ingest")
+//    is handled by the vercel.json rewrite rule, which proxies it securely to EC2.
+//    This means the raw EC2 IP is NEVER exposed to the browser.
+//  - LOCAL DEV: reads REACT_APP_API_URL from your .env.local file so you can point
+//    directly at http://localhost:8000 without touching vercel.json.
+const API_BASE_URL =
+  process.env.NODE_ENV === "production"
+    ? ""
+    : (process.env.REACT_APP_API_URL || "http://localhost:8000");
+
 
 function App() {
   // --- New States for GitHub Ingestion ---
