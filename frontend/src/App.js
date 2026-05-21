@@ -124,7 +124,10 @@ function App() {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
+        const decodedChunk = decoder.decode(value, { stream: true });
+        console.log("Raw chunk received from backend:", decodedChunk);
+        
+        buffer += decodedChunk;
         
         // Split on newlines, keeping the last incomplete line in the buffer
         const lines = buffer.split("\n");
@@ -133,8 +136,10 @@ function App() {
         for (const line of lines) {
           if (line.startsWith("data: ")) {
             const data = line.slice(6).trim();
+            console.log("Parsed SSE data string:", data);
             
             if (data === "[DONE]") {
+              console.log("Received [DONE] signal. Closing stream.");
               isLoadingRef.current = false;
               setIsLoading(false);
               return;
@@ -143,6 +148,7 @@ function App() {
             try {
               const parsed = JSON.parse(data);
               if (parsed.token) {
+                console.log("Appending token to state:", parsed.token);
                 setAnswer(prev => prev + parsed.token);
               }
             } catch (err) {
