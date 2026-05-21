@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
@@ -25,11 +25,19 @@ function App() {
   const [answer, setAnswer] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // --- Refs for synchronous lock protection ---
+  // React state updates (setIsLoading) are asynchronous. If a user holds down
+  // the Enter key, multiple submits can fire before the button disables.
+  // These refs prevent duplicate concurrent requests.
+  const isIngestingRef = useRef(false);
+  const isLoadingRef = useRef(false);
+
   // --- Updated Handler for /ingest (async polling pattern) ---
   const handleIngest = async (e) => {
     e.preventDefault();
-    if (!githubUrl.trim()) return;
+    if (isIngestingRef.current || !githubUrl.trim()) return;
 
+    isIngestingRef.current = true;
     setIsIngesting(true);
     setIngestStatus('Submitting repository...');
 
@@ -45,6 +53,7 @@ function App() {
       if (!submitRes.ok) {
         const err = await submitRes.json();
         setIngestStatus(`Error: ${err.detail || 'Failed to start ingestion.'}`);
+        isIngestingRef.current = false;
         setIsIngesting(false);
         return;
       }
@@ -63,10 +72,12 @@ function App() {
           } else if (data.status === 'complete') {
             clearInterval(poll);
             setIngestStatus('✅ Repo ready! You can now ask questions.');
+            isIngestingRef.current = false;
             setIsIngesting(false);
           } else if (data.status === 'failed') {
             clearInterval(poll);
             setIngestStatus(`❌ Error: ${data.detail || 'Ingestion failed.'}`);
+            isIngestingRef.current = false;
             setIsIngesting(false);
           }
           // 'pending' → keep polling silently
@@ -79,6 +90,7 @@ function App() {
     } catch (error) {
       console.error("Ingest submit error:", error);
       setIngestStatus('❌ Network error connecting to backend.');
+      isIngestingRef.current = false;
       setIsIngesting(false);
     }
   };
@@ -87,8 +99,9 @@ function App() {
   // --- Updated Handler for /ask ---
   const handleAsk = async (e) => {
     e.preventDefault();
-    if (!query.trim()) return;
+    if (isLoadingRef.current || !query.trim()) return;
 
+    isLoadingRef.current = true;
     setIsLoading(true);
     setAnswer(''); 
 
@@ -99,31 +112,42 @@ function App() {
         body: JSON.stringify({ query: query }),
       });
 
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const text = decoder.decode(value);
-        const lines = text.split("\n").filter(line => line.startsWith("data: "));
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Split on newlines, keeping the last incomplete line in the buffer
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
 
         for (const line of lines) {
-          const data = line.replace("data: ", "").trim();
-          
-          if (data === "[DONE]") {
-            setIsLoading(false);
-            return;
-          }
-
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.token) {
-              setAnswer(prev => prev + parsed.token);
+          if (line.startsWith("data: ")) {
+            const data = line.slice(6).trim();
+            
+            if (data === "[DONE]") {
+              isLoadingRef.current = false;
+              setIsLoading(false);
+              return;
             }
-          } catch (err) {
-            console.error("Error parsing JSON chunk:", err, data);
+
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.token) {
+                setAnswer(prev => prev + parsed.token);
+              }
+            } catch (err) {
+              console.error("Error parsing JSON chunk:", err, data);
+            }
           }
         }
       }
@@ -131,6 +155,7 @@ function App() {
       console.error("Streaming error:", error);
       setAnswer("An error occurred while fetching the response.");
     } finally {
+      isLoadingRef.current = false;
       setIsLoading(false);
     }
   };
