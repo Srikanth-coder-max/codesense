@@ -25,34 +25,64 @@ function App() {
   const [answer, setAnswer] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // --- Updated Handler for /ingest ---
+  // --- Updated Handler for /ingest (async polling pattern) ---
   const handleIngest = async (e) => {
     e.preventDefault();
     if (!githubUrl.trim()) return;
 
     setIsIngesting(true);
-    setIngestStatus('Cloning and building vector DB (this may take a moment)...');
+    setIngestStatus('Submitting repository...');
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/ingest`, {
+      // Phase 1: POST to kick off the job — returns 202 + job_id immediately.
+      // This call completes in <1s so Vercel's proxy timeout is never hit.
+      const submitRes = await fetch(`${API_BASE_URL}/api/ingest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ github_url: githubUrl }),
       });
 
-      if (response.ok) {
-        setIngestStatus('Repo ready! You can now ask questions.');
-      } else {
-        const errorData = await response.json();
-        setIngestStatus(`Error: ${errorData.detail || 'Failed to process repo'}`);
+      if (!submitRes.ok) {
+        const err = await submitRes.json();
+        setIngestStatus(`Error: ${err.detail || 'Failed to start ingestion.'}`);
+        setIsIngesting(false);
+        return;
       }
+
+      const { job_id } = await submitRes.json();
+      setIngestStatus('Cloning repo and building knowledge base… (this takes 1–3 minutes for large repos)');
+
+      // Phase 2: Poll GET /api/ingest/status/{job_id} every 3 seconds.
+      const poll = setInterval(async () => {
+        try {
+          const statusRes = await fetch(`${API_BASE_URL}/api/ingest/status/${job_id}`);
+          const data = await statusRes.json();
+
+          if (data.status === 'running') {
+            setIngestStatus('⚙️ Embedding code chunks into vector database…');
+          } else if (data.status === 'complete') {
+            clearInterval(poll);
+            setIngestStatus('✅ Repo ready! You can now ask questions.');
+            setIsIngesting(false);
+          } else if (data.status === 'failed') {
+            clearInterval(poll);
+            setIngestStatus(`❌ Error: ${data.detail || 'Ingestion failed.'}`);
+            setIsIngesting(false);
+          }
+          // 'pending' → keep polling silently
+        } catch (pollErr) {
+          console.error("Polling error:", pollErr);
+          // Network hiccup — keep polling, don't abort
+        }
+      }, 3000);
+
     } catch (error) {
-      console.error("Ingest error:", error);
-      setIngestStatus('Network error connecting to backend.');
-    } finally {
+      console.error("Ingest submit error:", error);
+      setIngestStatus('❌ Network error connecting to backend.');
       setIsIngesting(false);
     }
   };
+
 
   // --- Updated Handler for /ask ---
   const handleAsk = async (e) => {
