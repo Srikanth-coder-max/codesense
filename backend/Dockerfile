@@ -27,9 +27,10 @@ COPY . .
 # --- CRITICAL FIX ---
 # Create writeable directories AND set ownership AFTER all COPY commands.
 # If done before COPY, the COPY layer can silently overwrite directory ownership.
-# /app/temp  -> safe scratch space for git clones (replaces /tmp)
+# /app/temp  -> safe scratch space for temporary files (replaces /tmp)
+# /app/repos -> persistent git repository caching
 # /app/chromadb -> persistent vector DB storage
-RUN mkdir -p /app/temp /app/chromadb \
+RUN mkdir -p /app/temp /app/repos /app/chromadb \
     && chown -R appuser:appuser /app
 
 # Set TMPDIR so that tempfile.gettempdir() and any C-level library

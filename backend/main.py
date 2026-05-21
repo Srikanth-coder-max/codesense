@@ -19,10 +19,10 @@ from ingest import build_vector_db
 
 
 # ---------------------------------------------------------------------------
-# Temporary directory for git clones.
+# Persistent directory for cached git clones.
 # ---------------------------------------------------------------------------
-APP_TEMP_DIR = "/app/temp"
-os.makedirs(APP_TEMP_DIR, exist_ok=True)
+REPOS_DIR = "/app/repos"
+os.makedirs(REPOS_DIR, exist_ok=True)
 
 # Belt-and-suspenders: ensure git trusts any directory it encounters at runtime.
 try:
@@ -75,9 +75,20 @@ jobs: Dict[str, dict] = {}
 
 class QueryRequest(BaseModel):
     query: str
+    github_url: str  # Added to identify which repo's DB to query
 
 class RepoRequest(BaseModel):
     github_url: str
+
+
+def get_collection_name(github_url: str) -> str:
+    """Converts a GitHub URL into a safe collection/folder name."""
+    # e.g. https://github.com/tiangolo/fastapi -> tiangolo_fastapi
+    clean_url = github_url.replace("https://", "").replace("http://", "").rstrip("/")
+    parts = clean_url.split("/")
+    if len(parts) >= 3:
+        return f"{parts[-2]}_{parts[-1]}"
+    return parts[-1]
 
 
 # ---------------------------------------------------------------------------
@@ -85,14 +96,28 @@ class RepoRequest(BaseModel):
 # ---------------------------------------------------------------------------
 def _run_ingestion(job_id: str, github_url: str):
     """Called in a daemon thread. Updates jobs[job_id] as it progresses."""
-    temp_dir = tempfile.mkdtemp(dir=APP_TEMP_DIR)
     try:
         jobs[job_id]["status"] = JobStatus.RUNNING
-        print(f"[job:{job_id}] Cloning {github_url} -> {temp_dir}")
-        Repo.clone_from(github_url, temp_dir, depth=1, single_branch=True)
+        collection_name = get_collection_name(github_url)
+        repo_path = os.path.join(REPOS_DIR, collection_name)
+        
+        # 1. Repository Caching Logic (Pull or Clone)
+        if os.path.exists(repo_path) and os.path.isdir(os.path.join(repo_path, ".git")):
+            print(f"[job:{job_id}] Cache hit! Repo exists at {repo_path}. Pulling latest...")
+            repo = Repo(repo_path)
+            # Make sure we're on the default branch and pull
+            try:
+                repo.remotes.origin.pull()
+                print(f"[job:{job_id}] Git pull successful.")
+            except Exception as e:
+                print(f"[job:{job_id}] Git pull warning (might be offline or detached): {e}")
+        else:
+            print(f"[job:{job_id}] Cloning {github_url} -> {repo_path}")
+            Repo.clone_from(github_url, repo_path, depth=1, single_branch=True)
 
-        print(f"[job:{job_id}] Clone complete. Building vector DB...")
-        build_vector_db(repo_path=temp_dir)
+        # 2. Vector DB Logic (which now checks for existing index)
+        print(f"[job:{job_id}] Code ready. Building vector DB...")
+        build_vector_db(repo_path=repo_path, collection_name=collection_name)
 
         jobs[job_id]["status"] = JobStatus.COMPLETE
         jobs[job_id]["detail"] = "Repository ingested successfully."
@@ -104,10 +129,6 @@ def _run_ingestion(job_id: str, github_url: str):
         jobs[job_id]["detail"] = str(e)
         print(f"[job:{job_id}] FAILED: {e}")
         traceback.print_exc()
-
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        print(f"[job:{job_id}] Temp dir {temp_dir} cleaned up.")
 
 
 # ---------------------------------------------------------------------------
@@ -123,9 +144,10 @@ def health_check():
 @app.post("/api/ask")
 @traceable
 def ask_question(request: QueryRequest):
-    print(f"API received query: {request.query}")
+    print(f"API received query: {request.query} for {request.github_url}")
+    collection_name = get_collection_name(request.github_url)
     return StreamingResponse(
-        event_stream(request.query),
+        event_stream(request.query, collection_name),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -173,8 +195,8 @@ async def ingest_status(job_id: str):
     return {"job_id": job_id, "status": job["status"], "detail": job["detail"]}
 
 
-def event_stream(query: str):
-    for chunk in stream_answer(query):
+def event_stream(query: str, collection_name: str):
+    for chunk in stream_answer(query, collection_name):
         payload = json.dumps({"token": chunk})
         yield f"data: {payload}\n\n"
     yield "data: [DONE]\n\n"

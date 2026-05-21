@@ -106,10 +106,17 @@ function App() {
     setAnswer(''); 
 
     try {
+      if (!githubUrl.trim()) {
+        setAnswer("⚠️ Please enter a GitHub repository URL in the left panel first, so I know which codebase to search.");
+        isLoadingRef.current = false;
+        setIsLoading(false);
+        return;
+      }
+
       const response = await fetch(`${API_BASE_URL}/api/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query }),
+        body: JSON.stringify({ query: query, github_url: githubUrl }),
       });
 
       if (!response.ok) {

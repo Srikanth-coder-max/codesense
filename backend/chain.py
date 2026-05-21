@@ -33,11 +33,15 @@ def get_llm():
     )
 
 @traceable
-def stream_answer(query: str):
-    print(f"Thinking about: '{query}'...")
+def stream_answer(query: str, collection_name: str):
+    print(f"Thinking about: '{query}' for collection '{collection_name}'...")
     
     embeddings = HuggingFaceEmbeddings(model_name='all-MiniLM-L6-v2')
-    db = Chroma(persist_directory=CHROMA_DB_DIR, embedding_function=embeddings)
+    db = Chroma(
+        persist_directory=CHROMA_DB_DIR, 
+        collection_name=collection_name,
+        embedding_function=embeddings
+    )
     retriever = db.as_retriever(search_kwargs={'k': 3})
     
     # 1. Manually retrieve documents first
@@ -69,12 +73,12 @@ def stream_answer(query: str):
     for chunk in chain.stream({"context": context_str, "input": query}):
         yield chunk
 
-def get_answer(query: str) -> str:
+def get_answer(query: str, collection_name: str) -> str:
     """Non-streaming version for testing"""
-    chunks = list(stream_answer(query))
+    chunks = list(stream_answer(query, collection_name))
     return "".join(chunks)
 
 if __name__ == "__main__":
-    answer = get_answer("Explain what the math_funcs.py file does.")
+    answer = get_answer("Explain what the math_funcs.py file does.", "srikanthbabu_codesense")
     print("\nAI Response:\n")
     print(answer)

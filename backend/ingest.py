@@ -33,9 +33,24 @@ TEXT_EXTENSIONS = ['.md', '.txt', '.json', '.yaml', '.yml',
                    '.xml', '.html', '.css', '.sql', '.sh', '.bash', '.dockerfile']
 
 
-def build_vector_db(repo_path: str = None):
-    print("Starting ingestion pipeline...")
-    path = repo_path or REPO_PATH
+def build_vector_db(repo_path: str, collection_name: str):
+    print(f"Starting ingestion pipeline for collection: {collection_name}")
+    path = repo_path
+
+    # Check if collection already exists and has documents
+    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    
+    # Initialize Chroma to check the specific collection
+    db = Chroma(
+        persist_directory=CHROMA_DB_DIR,
+        collection_name=collection_name,
+        embedding_function=embeddings
+    )
+    
+    existing_count = db._collection.count()
+    if existing_count > 0:
+        print(f"✅ Collection '{collection_name}' already exists with {existing_count} documents. Skipping embedding.")
+        return
 
     all_docs = []
 
@@ -68,8 +83,7 @@ def build_vector_db(repo_path: str = None):
                         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                             content = f.read()
                             if content.strip():  # Only add if file has content
-                                relative_path = os.path.relpath(
-                                    file_path, path)
+                                relative_path = os.path.relpath(file_path, path)
                                 doc = Document(
                                     page_content=content,
                                     metadata={'source': relative_path}
@@ -78,8 +92,7 @@ def build_vector_db(repo_path: str = None):
                     except Exception as e:
                         print(f"    Could not read {file_path}: {e}")
 
-                print(
-                    f"  Loaded {len([d for d in all_docs if d.metadata.get('source', '').endswith(ext)])} {ext} files.")
+                print(f"  Loaded {len([d for d in all_docs if d.metadata.get('source', '').endswith(ext)])} {ext} files.")
         except Exception as e:
             print(f"  Warning: Could not process {ext} files: {e}")
 
@@ -90,42 +103,20 @@ def build_vector_db(repo_path: str = None):
         print("Warning: No documents found to ingest.")
         return
 
-    embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    print(f"Chroma persist directory: {CHROMA_DB_DIR}")
     try:
-        print("Checking CHROMA_DB_DIR access:")
-        try:
-            print("  exists:", os.path.exists(CHROMA_DB_DIR))
-            print("  stat:", os.stat(CHROMA_DB_DIR))
-            print("  writable:", os.access(CHROMA_DB_DIR, os.W_OK))
-        except Exception as _e:
-            print("  access check failed:", _e)
-
-        # Ensure the directory exists and is writable
-        try:
-            os.makedirs(CHROMA_DB_DIR, exist_ok=True)
-        except Exception as _e:
-            print("  Could not create CHROMA_DB_DIR:", _e)
-
+        os.makedirs(CHROMA_DB_DIR, exist_ok=True)
         print("Creating Chroma vector store (this may write files)...")
+        
+        # Add documents to the isolated collection
         vector_store = Chroma.from_documents(
             documents=all_docs,
             embedding=embeddings,
-            persist_directory=CHROMA_DB_DIR
+            persist_directory=CHROMA_DB_DIR,
+            collection_name=collection_name
         )
-        # Persist explicitly if supported
-        try:
-            vector_store.persist()
-        except Exception:
-            pass
-
-        print("Ingestion Complete. Chroma DB saved.")
+        print(f"Ingestion Complete. Chroma DB collection '{collection_name}' saved.")
     except Exception as e:
         import traceback
         print("Exception while saving Chroma DB:", e)
         traceback.print_exc()
         raise
-
-
-if __name__ == "__main__":
-    build_vector_db()
