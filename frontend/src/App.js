@@ -120,25 +120,35 @@ function App() {
       const decoder = new TextDecoder();
       let buffer = "";
 
+      console.log("Stream reader started...");
+
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          console.log("Stream reader done.");
+          break;
+        }
 
         const decodedChunk = decoder.decode(value, { stream: true });
-        console.log("Raw chunk received from backend:", decodedChunk);
+        console.log("Chunk received:", decodedChunk);
         
         buffer += decodedChunk;
         
-        // Split on newlines, keeping the last incomplete line in the buffer
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
+        // SSE events are strictly separated by \n\n
+        const events = buffer.split("\n\n");
+        
+        // Keep the last element in the buffer (it might be an incomplete event)
+        buffer = events.pop() || "";
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            const data = line.slice(6).trim();
-            console.log("Parsed SSE data string:", data);
+        for (const event of events) {
+          const trimmedEvent = event.trim();
+          if (!trimmedEvent) continue;
+
+          // SSE format is: data: {json_payload}
+          if (trimmedEvent.startsWith("data: ")) {
+            const dataString = trimmedEvent.slice(6).trim();
             
-            if (data === "[DONE]") {
+            if (dataString === "[DONE]") {
               console.log("Received [DONE] signal. Closing stream.");
               isLoadingRef.current = false;
               setIsLoading(false);
@@ -146,13 +156,13 @@ function App() {
             }
 
             try {
-              const parsed = JSON.parse(data);
-              if (parsed.token) {
-                console.log("Appending token to state:", parsed.token);
-                setAnswer(prev => prev + parsed.token);
+              const parsedData = JSON.parse(dataString);
+              if (parsedData.token !== undefined) {
+                console.log("Token found:", parsedData.token);
+                setAnswer(prev => prev + parsedData.token);
               }
             } catch (err) {
-              console.error("Error parsing JSON chunk:", err, data);
+              console.error("Error parsing JSON chunk. Raw string:", dataString, "Error:", err);
             }
           }
         }
