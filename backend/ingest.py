@@ -29,14 +29,16 @@ LANGUAGE_MAP = {
 }
 
 # Text files to load as plain text
-TEXT_EXTENSIONS = ['.md', '.txt', '.json', '.yaml', '.yml', '.xml', '.html', '.css', '.sql', '.sh', '.bash', '.dockerfile']
+TEXT_EXTENSIONS = ['.md', '.txt', '.json', '.yaml', '.yml',
+                   '.xml', '.html', '.css', '.sql', '.sh', '.bash', '.dockerfile']
+
 
 def build_vector_db(repo_path: str = None):
     print("Starting ingestion pipeline...")
     path = repo_path or REPO_PATH
-    
+
     all_docs = []
-    
+
     # Load files for each supported language
     for ext, language in LANGUAGE_MAP.items():
         try:
@@ -52,21 +54,22 @@ def build_vector_db(repo_path: str = None):
             print(f"  Loaded {len(docs)} chunks from {ext} files.")
         except Exception as e:
             print(f"  Warning: Could not load {ext} files: {e}")
-    
+
     # Load text files using simple text loader
     for ext in TEXT_EXTENSIONS:
         try:
             print(f"Loading {ext} files...")
             pattern = os.path.join(path, "**/*" + ext)
             files = glob.glob(pattern, recursive=True)
-            
+
             if files:
                 for file_path in files:
                     try:
                         with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                             content = f.read()
                             if content.strip():  # Only add if file has content
-                                relative_path = os.path.relpath(file_path, path)
+                                relative_path = os.path.relpath(
+                                    file_path, path)
                                 doc = Document(
                                     page_content=content,
                                     metadata={'source': relative_path}
@@ -74,25 +77,55 @@ def build_vector_db(repo_path: str = None):
                                 all_docs.append(doc)
                     except Exception as e:
                         print(f"    Could not read {file_path}: {e}")
-                
-                print(f"  Loaded {len([d for d in all_docs if d.metadata.get('source', '').endswith(ext)])} {ext} files.")
+
+                print(
+                    f"  Loaded {len([d for d in all_docs if d.metadata.get('source', '').endswith(ext)])} {ext} files.")
         except Exception as e:
             print(f"  Warning: Could not process {ext} files: {e}")
-    
+
     total_chunks = len(all_docs)
     print(f"Loaded {total_chunks} total chunks.")
-    
+
     if total_chunks == 0:
         print("Warning: No documents found to ingest.")
         return
 
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    vector_store = Chroma.from_documents(
-        documents=all_docs,
-        embedding=embeddings,
-        persist_directory=CHROMA_DB_DIR
-    )
-    print("Ingestion Complete. Chroma DB saved.")
+    print(f"Chroma persist directory: {CHROMA_DB_DIR}")
+    try:
+        print("Checking CHROMA_DB_DIR access:")
+        try:
+            print("  exists:", os.path.exists(CHROMA_DB_DIR))
+            print("  stat:", os.stat(CHROMA_DB_DIR))
+            print("  writable:", os.access(CHROMA_DB_DIR, os.W_OK))
+        except Exception as _e:
+            print("  access check failed:", _e)
+
+        # Ensure the directory exists and is writable
+        try:
+            os.makedirs(CHROMA_DB_DIR, exist_ok=True)
+        except Exception as _e:
+            print("  Could not create CHROMA_DB_DIR:", _e)
+
+        print("Creating Chroma vector store (this may write files)...")
+        vector_store = Chroma.from_documents(
+            documents=all_docs,
+            embedding=embeddings,
+            persist_directory=CHROMA_DB_DIR
+        )
+        # Persist explicitly if supported
+        try:
+            vector_store.persist()
+        except Exception:
+            pass
+
+        print("Ingestion Complete. Chroma DB saved.")
+    except Exception as e:
+        import traceback
+        print("Exception while saving Chroma DB:", e)
+        traceback.print_exc()
+        raise
+
 
 if __name__ == "__main__":
     build_vector_db()

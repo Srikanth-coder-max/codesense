@@ -1,7 +1,7 @@
 # Use a slim, production-ready base image
 FROM python:3.11-slim
 
-# Install system dependencies (git is required for your Repo.clone_from)
+# Install system dependencies (git is required for Repo.clone_from)
 # Cleanup apt lists to keep the image size small
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
@@ -13,23 +13,35 @@ WORKDIR /app
 # Create a non-root user for security best practices
 RUN useradd -m appuser
 
-# Create a temporary directory owned by appuser to avoid permission issues
-RUN mkdir -p /app/temp && chown -R appuser:appuser /app/temp
+# Copy requirements first (as root, before switching user) to leverage layer caching
+COPY requirements.txt .
 
-USER appuser
-
-# Copy requirements first to leverage Docker layer caching
-# This ensures pip install only re-runs if requirements.txt changes
-COPY --chown=appuser:appuser requirements.txt .
-
-# Install dependencies
-# Using --no-cache-dir keeps the image size lean
+# Install dependencies as root so pip can write to site-packages without issues
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY --chown=appuser:appuser . .
+# Copy all application code
+COPY . .
+
+# --- CRITICAL FIX ---
+# Create writeable directories AND set ownership AFTER all COPY commands.
+# If done before COPY, the COPY layer can silently overwrite directory ownership.
+# /app/temp  -> safe scratch space for git clones (replaces /tmp)
+# /app/chromadb -> persistent vector DB storage
+RUN mkdir -p /app/temp /app/chromadb \
+    && chown -R appuser:appuser /app
+
+# Set TMPDIR so that tempfile.gettempdir() and any C-level library
+# that reads $TMPDIR also use our writeable directory, not the root-owned /tmp.
+ENV TMPDIR=/app/temp
+
+# Configure git to trust the /app directory (avoids 'dubious ownership' warnings
+# when the cloned repo is owned by appuser but git sees a different uid).
+RUN git config --global --add safe.directory '*'
+
+# Switch to non-root user for runtime
+USER appuser
 
 # Expose port and start the application
 EXPOSE 8000

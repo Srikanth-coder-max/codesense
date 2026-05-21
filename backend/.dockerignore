@@ -1,6 +1,10 @@
 __pycache__
 *.pyc
+*.pyo
 .env
 chroma_db/
+chromadb/
+sample_repo/
 .venv
 venv
+temp/
